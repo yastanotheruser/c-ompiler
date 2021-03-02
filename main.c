@@ -2,7 +2,7 @@
 #include <string.h>
 #include "cdefs.h"
 #include "cmem.h"
-#include "lexer.h"
+#include "parser.h"
 
 int main(int argc, char *argv[]) {
     FILE **files;
@@ -39,19 +39,9 @@ int main(int argc, char *argv[]) {
     }
 
     for (FILE **f = files; *f != NULL; f++) {
-        Lexer *l = lexer_new(*f);
-        Token *t;
-
-        while ((t = lexer_next_token(l)) != NULL) {
-            printf("type = %d ; text = %s\n", t->type, t->text);
-            lexer_token_destroy(t);
-        }
-
-        if (l->error != NULL) {
-            fprintf(stderr, "%s\n", l->error->text);
-        }
-
-        lexer_destroy(l);
+        Lexer *lex = lexer_new(*f);
+        Parser *p = parser_new(lex);
+        parser_parse(p);
     }
 
     return 0;

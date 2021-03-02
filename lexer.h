@@ -13,9 +13,9 @@
 #endif
 
 typedef enum {
-    NO_ERROR,
-    INVALID_TOKEN,
-    UNEXPECTED_EOF,
+    LEXER_ERROR_NO_ERROR,
+    LEXER_ERROR_INVALID_TOKEN,
+    LEXER_ERROR_UNEXPECTED_EOF,
 } LexerErrorType;
 
 typedef struct {

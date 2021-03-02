@@ -81,7 +81,7 @@ Token *lexer_next_token(Lexer *lex)
     char c;
     int s;
     int use_char;
-    LexerErrorType error = NO_ERROR;
+    LexerErrorType error = LEXER_ERROR_NO_ERROR;
     lexer_buffer_seek(lex->tbuf, 0, LEXER_BUFFER_SET);
 
     while (TRUE) {
@@ -126,7 +126,7 @@ Token *lexer_next_token(Lexer *lex)
             } else if (c == '&' || c == '|') {
                 state = OL;
             } else {
-                error = INVALID_TOKEN;
+                error = LEXER_ERROR_INVALID_TOKEN;
             }
 
             break;
@@ -161,9 +161,9 @@ Token *lexer_next_token(Lexer *lex)
             if (s || !isdigit(c)) {
                 use_char = FALSE;
                 if (lex->eof) {
-                    error = UNEXPECTED_EOF;
+                    error = LEXER_ERROR_UNEXPECTED_EOF;
                 } else {
-                    error = INVALID_TOKEN;
+                    error = LEXER_ERROR_INVALID_TOKEN;
                 }
             } else {
                 state = NUM5;
@@ -240,7 +240,7 @@ Token *lexer_next_token(Lexer *lex)
             }
         }
 
-        if (error != NO_ERROR) {
+        if (error != LEXER_ERROR_NO_ERROR) {
             break;
         }
 
@@ -269,7 +269,7 @@ Token *lexer_next_token(Lexer *lex)
     }
 
     lexer_buffer_put(lex->tbuf, 0);
-    if (error != NO_ERROR) {
+    if (error != LEXER_ERROR_NO_ERROR) {
         lex->error = lexer_error_new(lex, error);
         return NULL;
     }
@@ -302,11 +302,11 @@ LexerError *lexer_error_new(Lexer *lex, LexerErrorType type)
     err->type = type;
 
     switch (type) {
-    case INVALID_TOKEN:
+    case LEXER_ERROR_INVALID_TOKEN:
         sprintf(err->text, "Token inválido `%s` en línea %d, columna %d",
                 lex->tbuf->data, line + 1, column + 1);
         break;
-    case UNEXPECTED_EOF:
+    case LEXER_ERROR_UNEXPECTED_EOF:
         strcpy(err->text, "No se esperaba fin de archivo");
         break;
     default:
