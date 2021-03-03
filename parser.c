@@ -23,6 +23,23 @@ ParserError *parser_error_new(Parser *p, ParserErrorType type)
 {
     ParserError *err = cmalloc(sizeof(*err));
     err->type = type;
+
+    switch (type) {
+    case PARSER_ERROR_LEXER_ERROR:
+        sprintf(err->text, "Error léxico: %s", p->lex->error->text);
+        break;
+    case PARSER_ERROR_UNEXPECTED_TOKEN:
+        sprintf(err->text, "No se esperaba token `%s` en línea %d, columna %d",
+                p->token->text, p->token->line + 1, p->token->column + 1);
+        break;
+    case PARSER_ERROR_UNEXPECTED_EOF:
+        strcpy(err->text, "No se esperaba fin de archivo");
+        break;
+    case PARSER_ERROR_INVALID_SEQUENCE:
+        strcpy(err->text, "Secuencia inválida");
+        break;
+    }
+
     return err;
 }
 
@@ -37,6 +54,8 @@ Parser *parser_new(Lexer *lex)
     p->lex = lex;
     p->stack = parser_stack_new();
     p->error = NULL;
+    p->beforeproc = NULL;
+    p->afterproc = NULL;
     return p;
 }
 
@@ -66,171 +85,134 @@ static int parser_advance(Parser *p)
     return p->token != NULL;
 }
 
-static void parser_accept(Parser *p)
-{
-    // Secuencia aceptada
-    puts("Secuencia aceptada");
-}
-
 static void parser_reject(Parser *p)
 {
     // Secuencia rechazada
-    p->error = parser_error_new(p, PARSER_ERROR_INVALID_SEQUENCE);
-    puts("Secuencia rechazada");
+    ParserError *err;
+    if (p->token == NULL) {
+        if (p->lex->error != NULL) {
+            err = parser_error_new(p, PARSER_ERROR_LEXER_ERROR);
+        } else {
+            err = parser_error_new(p, PARSER_ERROR_UNEXPECTED_EOF);
+        }
+    } else {
+        err = parser_error_new(p, PARSER_ERROR_UNEXPECTED_TOKEN);
+    }
+
+    p->error = err;
 }
 
-static void parser_proc1(Parser *p)
-{
-    // <A> → <B><A'>
-    // Entrada: id | num | "("
+// <A> → <B><A'>
+// Entrada: id | num | "("
+PARSER_PROC(1,
+    parser_stack_pop(p->stack, NULL);
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_AP);
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_B))
+
+// <A'> → <OL><B><A'>
+// Entrada: "&" | "|"
+PARSER_PROC(2,
     parser_stack_pop(p->stack, NULL);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_AP);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_B);
-}
+    parser_advance(p))
 
-static void parser_proc2(Parser *p)
-{
-    // <A'> → <OL><B><A'>
-    // Entrada: "&" | "|"
+// <A'> → ε
+// Entrada: ")" | ¬
+PARSER_PROC(3, parser_stack_pop(p->stack, NULL))
+
+// <B> → <C><B'>
+// Entrada: id | num | "("
+PARSER_PROC(4,
     parser_stack_pop(p->stack, NULL);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_AP);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_B);
-    parser_advance(p);
-}
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_BP);
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_C))
 
-static void parser_proc3(Parser *p)
-{
-    // <A'> → ε
-    // Entrada: ")" | ¬
-    parser_stack_pop(p->stack, NULL);
-}
-
-static void parser_proc4(Parser *p)
-{
-    // <B> → <C><B'>
-    // Entrada: id | num | "("
+// <B'> → <OR><C><B'>
+// Entrada: "=" | "<" | "<=" | ">" | ">="
+PARSER_PROC(5,
     parser_stack_pop(p->stack, NULL);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_BP);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_C);
-}
+    parser_advance(p))
 
-static void parser_proc5(Parser *p)
-{
-    // <B'> → <OR><C><B'>
-    // Entrada: "=" | "<" | "<=" | ">" | ">="
+// <B'> → ε
+// Entrada: <OL> | ")" | ¬
+PARSER_PROC(6, parser_stack_pop(p->stack, NULL))
+
+// <C> → <D><C'>
+// Entrada: id | num | "("
+PARSER_PROC(7,
     parser_stack_pop(p->stack, NULL);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_BP);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_C);
-    parser_advance(p);
-}
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_CP);
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_D))
 
-static void parser_proc6(Parser *p)
-{
-    // <B'> → ε
-    // Entrada: <OL> | ")" | ¬
-    parser_stack_pop(p->stack, NULL);
-}
-
-static void parser_proc7(Parser *p)
-{
-    // <C> → <D><C'>
-    // Entrada: id | num | "("
+// <C'> → <OA1><D><C'>
+// Entrada: "+" | "-"
+PARSER_PROC(8,
     parser_stack_pop(p->stack, NULL);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_CP);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_D);
-}
+    parser_advance(p))
 
-static void parser_proc8(Parser *p)
-{
-    // <C'> → <OA1><D><C'>
-    // Entrada: "+" | "-"
+// <C'> → ε
+// Entrada: <OR> | <OL> | ")" | ¬
+PARSER_PROC(9, parser_stack_pop(p->stack, NULL))
+
+// <D> → <E><D'>
+// Entrada: id | num | "("
+PARSER_PROC(10,
     parser_stack_pop(p->stack, NULL);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_CP);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_D);
-    parser_advance(p);
-}
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_DP);
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_E))
 
-static void parser_proc9(Parser *p)
-{
-    // <C'> → ε
-    // Entrada: <OR> | <OL> | ")" | ¬
-    parser_stack_pop(p->stack, NULL);
-}
-
-static void parser_proc10(Parser *p)
-{
-    // <D> → <E><D'>
-    // Entrada: id | num | "("
+// <D'> → <OA2><E><D'>
+// Entrada: "*" | "/"
+PARSER_PROC(11,
     parser_stack_pop(p->stack, NULL);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_DP);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_E);
-}
+    parser_advance(p))
 
-static void parser_proc11(Parser *p)
-{
-    // <D'> → <OA2><E><D'>
-    // Entrada: "*" | "/"
+// <D'> → ε
+// Entrada: <OA1> | <OR> | <OL> | ")" | ¬
+PARSER_PROC(12, parser_stack_pop(p->stack, NULL))
+
+// <E> → <F><E'>
+// Entrada: id | num | "("
+PARSER_PROC(13,
     parser_stack_pop(p->stack, NULL);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_DP);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_E);
-    parser_advance(p);
-}
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_EP);
+    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_F))
 
-static void parser_proc12(Parser *p)
-{
-    // <D'> → ε
-    // Entrada: <OA1> | <OR> | <OL> | ")" | ¬
-    parser_stack_pop(p->stack, NULL);
-}
-
-static void parser_proc13(Parser *p)
-{
-    // <E> → <F><E'>
-    // Entrada: id | num | "("
+// <E'> → <OA3><F><E'>
+// Entrada: "^"
+PARSER_PROC(14,
     parser_stack_pop(p->stack, NULL);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_EP);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_F);
-}
+    parser_advance(p))
 
-static void parser_proc14(Parser *p)
-{
-    // <E'> → <OA3><F><E'>
-    // Entrada: "^"
+// <E'> → ε
+// Entrada: <OA2> | <OA1> | <OR> | <OL> | ")" | ¬
+PARSER_PROC(15, parser_stack_pop(p->stack, NULL))
+
+// <F> → id | num
+PARSER_PROC(16,
     parser_stack_pop(p->stack, NULL);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_EP);
-    parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_F);
-    parser_advance(p);
-}
+    parser_advance(p))
 
-static void parser_proc15(Parser *p)
-{
-    // <E'> → ε
-    // Entrada: <OA2> | <OA1> | <OR> | <OL> | ")" | ¬
-    parser_stack_pop(p->stack, NULL);
-}
-
-static void parser_proc16(Parser *p)
-{
-    // <F> → id | num
-    parser_stack_pop(p->stack, NULL);
-    parser_advance(p);
-}
-
-static void parser_proc17(Parser *p)
-{
-    // <F> → "(" <A> ")"
+// <F> → "(" <A> ")"
+PARSER_PROC(17,
     parser_stack_pop(p->stack, NULL);
     parser_stack_push(p->stack, PARSER_SYMBOL_TERM_RP);
     parser_stack_push(p->stack, PARSER_SYMBOL_NONTERM_A);
-    parser_advance(p);
-}
+    parser_advance(p))
 
-static void parser_proc18(Parser *p)
-{
-    // Símbolo de pila: "("
+// Símbolo de pila: "("
+PARSER_PROC(18,
     parser_stack_pop(p->stack, NULL);
-    parser_advance(p);
-}
+    parser_advance(p));
 
 /*
  * Gramática:
@@ -273,12 +255,12 @@ void parser_parse(Parser *p)
         int stack_top = *parser_stack_top(p->stack);
         switch (stack_top) {
         case PARSER_SYMBOL_BOTTOM:
-            if (p->token == NULL) {
-                parser_accept(p);
-            } else {
+            // Rechazar si aún queda un token
+            if (p->token != NULL) {
                 parser_reject(p);
             }
 
+            // Finalizar análisis sintáctico
             return;
         case PARSER_SYMBOL_NONTERM_A:
             if (p->token == NULL) {
@@ -351,7 +333,7 @@ void parser_parse(Parser *p)
                 break;
             default:
                 parser_reject(p);
-                break;
+                return;
             }
 
             break;
@@ -500,7 +482,7 @@ void parser_parse(Parser *p)
                 break;
             default:
                 parser_reject(p);
-                break;
+                return;
             }
 
             break;

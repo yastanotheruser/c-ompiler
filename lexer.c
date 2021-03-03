@@ -81,6 +81,8 @@ Token *lexer_next_token(Lexer *lex)
     char c;
     int s;
     int use_char;
+    int line;
+    int column;
     LexerErrorType error = LEXER_ERROR_NO_ERROR;
     lexer_buffer_seek(lex->tbuf, 0, LEXER_BUFFER_SET);
 
@@ -127,8 +129,11 @@ Token *lexer_next_token(Lexer *lex)
                 state = OL;
             } else {
                 error = LEXER_ERROR_INVALID_TOKEN;
+                break;
             }
 
+            line = lex->line;
+            column = lex->column;
             break;
         case NUM1:
             if (s) {
@@ -274,16 +279,18 @@ Token *lexer_next_token(Lexer *lex)
         return NULL;
     }
 
-    return lexer_token_new(type, lex->tbuf->data);
+    return lexer_token_new(type, lex->tbuf->data, line, column);
 }
 
-Token *lexer_token_new(TokenType type, const char *text)
+Token *lexer_token_new(TokenType type, const char *text, int line, int column)
 {
     Token *t = cmalloc(sizeof(*t));
     char *dest = cmalloc(strlen(text) + 1);
     strcpy(dest, text);
     t->type = type;
     t->text = dest;
+    t->line = line;
+    t->column = column;
     return t;
 }
 
@@ -297,8 +304,7 @@ LexerError *lexer_error_new(Lexer *lex, LexerErrorType type)
 {
     LexerError *err = cmalloc(sizeof(*err));
     int line = lex->line;
-    int column = lex->column;
-    column -= lexer_buffer_offset(lex->tbuf) - 1;
+    int column = lex->column - lexer_buffer_offset(lex->tbuf) + 1;
     err->type = type;
 
     switch (type) {

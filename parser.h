@@ -4,6 +4,19 @@
 #include "stack.h"
 #include "lexer.h"
 
+// Estructura general de un procedimiento del parser
+#define PARSER_PROC(name, definition) \
+    static void parser_proc##name(Parser *p) \
+    { \
+        if (p->beforeproc != NULL) { \
+            p->beforeproc(#name, p); \
+        } \
+        definition; \
+        if (p->afterproc != NULL) { \
+            p->afterproc(#name, p); \
+        } \
+    }
+
 typedef enum {
     PARSER_ERROR_LEXER_ERROR,
     PARSER_ERROR_UNEXPECTED_TOKEN,
@@ -16,11 +29,15 @@ typedef struct {
     char text[128];
 } ParserError;
 
-typedef struct {
+struct Parser;
+typedef void (*ParserProcCallback)(const char*, struct Parser*);
+typedef struct Parser {
     Lexer *lex;
     Token *token;
     ParserStack *stack;
     ParserError *error;
+    ParserProcCallback beforeproc;
+    ParserProcCallback afterproc;
 } Parser;
 
 ParserError *parser_error_new(Parser *p, ParserErrorType type);

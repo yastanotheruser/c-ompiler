@@ -49,12 +49,14 @@ typedef enum {
 typedef struct {
     TokenType type;
     const char *text;
+    int line;
+    int column;
 } Token;
 
 Lexer *lexer_new(FILE *stream);
 void lexer_destroy(Lexer *lex);
 Token *lexer_next_token(Lexer *lex);
-Token *lexer_token_new(TokenType type, const char *text);
+Token *lexer_token_new(TokenType type, const char *text, int line, int column);
 void lexer_token_destroy(Token *t);
 LexerError *lexer_error_new(Lexer *lex, LexerErrorType type);
 void lexer_error_destroy(LexerError *err);
